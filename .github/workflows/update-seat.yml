@@ -1,0 +1,60 @@
+name: Update seat daily
+
+on:
+  schedule:
+    - cron: "5 0 * * *"  # tiap hari 00:05 UTC (sekitar pagi WIB)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update seat.json
+        run: |
+          python - << 'PY'
+          import json
+          from datetime import date, datetime
+
+          TOTAL = 500
+          SOLD_AT_START = 70
+          START = date(2026, 2, 18)
+          EVENT = date(2026, 3, 8)
+
+          today = date.today()
+
+          # target sold max (misal 95% sold pada hari H)
+          max_sold = int(TOTAL * 0.95)
+
+          if today <= START:
+            sold = SOLD_AT_START
+          elif today >= EVENT:
+            sold = max_sold
+          else:
+            total_days = (EVENT - START).days
+            passed = (today - START).days
+            progress = int((passed / total_days) * (max_sold - SOLD_AT_START))
+            sold = SOLD_AT_START + progress
+
+          data = {
+            "total": TOTAL,
+            "sold": sold,
+            "updated_at": today.isoformat()
+          }
+
+          with open("seat.json", "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+          PY
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add seat.json
+          git commit -m "chore: update seat.json" || echo "No changes"
+          git push
